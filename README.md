@@ -23,10 +23,15 @@ A TUI for streaming music from [musicforprogramming.net](https://musicforprogram
 
 ## Keybindings
 
-*   `q`: Quit the application.
-*   `up`: Move down in the episode list.
-*   `down`: Move up in the episode list.
-*   `Enter`: Play the selected episode.
+*   `q`, `Esc`: Quit the application.
+*   `Tab`: Cycle focus between Menu, Episode List, About, and Credits sections.
+*   `Up`/`Down`: 
+    *   Navigate lists (Menu, Episode List).
+    *   Scroll text (About, Credits).
+*   `Enter`: Play the selected episode (when Episode List is focused).
+*   `Space`: Pause/Resume playback.
+*   `s`: Stop playback.
+*   `+`/`-`: Increase/Decrease volume.
 
 ## License
 

@@ -5,9 +5,8 @@ use ratatui::crossterm::event::{
 use std::sync::{
     mpsc,
 };
-use ratatui::prelude::Rect;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 /// Terminal events.
 #[derive(Clone, Copy, Debug)]
 pub enum Event {
@@ -34,7 +33,7 @@ pub struct EventHandler {
 
 impl EventHandler {
     /// Constructs a new instance of [`EventHandler`].
-    pub fn new(tick_rate: u64) -> Self {
+    pub fn new(_tick_rate: u64) -> Self {
         let (sender, receiver) = mpsc::channel();
         let handler = {
             let sender = sender.clone();
