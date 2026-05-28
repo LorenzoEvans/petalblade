@@ -16,7 +16,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }
 rss = "2.0.8"
 stream-download = "0.7.1"
-tui-scrollview = "0.3.12"
+tui-scrollview = "0.6.4"
 tachyonfx = "0.4.0"
 futures = "0.3.30"
 dirs = "5.0.1"
