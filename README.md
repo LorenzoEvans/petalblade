@@ -1,6 +1,6 @@
 # Petalblade
 
-![](./assets/petalblade.png)
+![](./assets/petalblade-tui.png.png)
 
 A TUI for streaming music from [musicforprogramming.net](https://musicforprogramming.net).
 
