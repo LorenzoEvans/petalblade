@@ -14,7 +14,7 @@ reqwest = { version = "0.12.5", features = ["blocking", "stream"] }
 crossterm = { version = "0.27.0", features = ["event-stream"] }
 serde = { version = "1.0.204", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }
-rss = "2.0.8"
+rss = "2.0.13"
 stream-download = "0.7.1"
 tui-scrollview = "0.3.12"
 tachyonfx = "0.4.0"
