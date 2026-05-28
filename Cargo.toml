@@ -20,7 +20,7 @@ tui-scrollview = "0.3.12"
 tachyonfx = "0.4.0"
 futures = "0.3.30"
 dirs = "5.0.1"
-anyhow = "1.0.86"
+anyhow = "1.0.102"
 futures-util = "0.3.30"
 color-eyre = "0.6.3"
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
