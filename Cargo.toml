@@ -1,0 +1,31 @@
+[package]
+name = "petalblade"
+version = "0.1.0"
+description = "A TUI for streaming musicForProgramming Mixes"
+authors = ["liminallogs@proton.me <liminallogs@proton.me>"]
+license = "MIT"
+edition = "2024"
+
+
+[dependencies]
+ratatui = "0.27.0"
+rodio = { version = "0.19.0", default-features = false, features = ["symphonia-all"] }
+reqwest = { version = "0.12.5", features = ["blocking", "stream"] }
+crossterm = { version = "0.27.0", features = ["event-stream"] }
+serde = { version = "1.0.204", features = ["derive"] }
+tokio = { version = "1.38.0", features = ["full"] }
+rss = "2.0.8"
+stream-download = "0.7.1"
+tui-scrollview = "0.3.12"
+tachyonfx = "0.4.0"
+futures = "0.3.30"
+dirs = "5.0.1"
+anyhow = "1.0.86"
+futures-util = "0.3.30"
+color-eyre = "0.6.3"
+# Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
