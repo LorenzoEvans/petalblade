@@ -12,7 +12,7 @@ A TUI for streaming music from [musicforprogramming.net](https://musicforprogram
 
 1.  Clone the repository:
     ```sh
-    git clone https://github.com/your-username/petalblade.git
+    git clone https://github.com/LorenzoEvans/petalblade.git
     ```
 2.  Build the project:
     ```sh
