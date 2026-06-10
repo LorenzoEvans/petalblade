@@ -1,22 +1,23 @@
-use futures::StreamExt;
 use ratatui::widgets::ListState;
 use reqwest::get;
-use rodio::{Decoder, OutputStream, Sink, Source};
+use rodio::{Decoder, OutputStream, Sink};
 use rss::Channel;
 use std::{
     error::Error,
-    io::Cursor,
+    io::BufReader,
     sync::{Arc, RwLock},
-    time::Duration,
 };
+use stream_download::http::HttpStream;
 use stream_download::http::reqwest::Client;
+use stream_download::source::SourceStream;
+use stream_download::storage::temp::TempStorageProvider;
+use stream_download::{Settings, StreamDownload};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 
 type AudioResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub type AppResult<T> = Result<T, Box<dyn Error>>;
-const BUFFER_SIZE: usize = 1024 * 512;
-const SLEEP_DURATION: Duration = Duration::from_millis(5);
+
 #[derive(Debug, Clone)]
 pub struct Episode {
     pub title: String,
@@ -48,6 +49,10 @@ pub struct App {
     pub selected_list: SelectedList,
     pub audio_manager: AudioManager,
     pub volume: f32,
+    pub search_query: String,
+    pub input_mode: InputMode,
+    pub show_help: bool,
+    pub status_message: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +61,13 @@ pub enum SelectedList {
     Episodes,
     About,
     Credits,
+    Search,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum InputMode {
+    Normal,
+    Editing,
 }
 
 impl App {
@@ -84,46 +96,27 @@ impl App {
                 match command {
                     AudioCommand::Play(url) => {
                         sink.stop();
-                        let (tx_stream, mut rx_stream) = mpsc::channel(1024);
-                        let rt_handle_clone = rt_handle.clone();
-                        rt_handle.spawn(async move {
-                            if let Ok(response) = reqwest::get(&url).await {
-                                let mut stream = response.bytes_stream();
-                                while let Some(item) = stream.next().await {
-                                    if let Ok(chunk) = item {
-                                        if tx_stream.send(chunk).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        });
-
-                        let (decode_tx, mut decode_rx) = mpsc::channel(32);
-                        std::thread::spawn(move || {
-                            let rt = tokio::runtime::Runtime::new().unwrap();
-                            rt.block_on(async {
-                                let mut buffer = Vec::new();
-                                while let Some(chunk) = rx_stream.recv().await {
-                                    buffer.extend_from_slice(&chunk);
-                                    if buffer.len() >= BUFFER_SIZE {
-                                        if let Ok(source) = Decoder::new(Cursor::new(buffer.clone())) {
-                                            let _ = decode_tx.send(source.convert_samples::<f32>().buffered()).await;
-                                        }
-                                        buffer.clear();
-                                    }
-                                }
-                            });
-                        });
-
                         let sink_clone = Arc::clone(&sink);
-                        rt_handle_clone.spawn(async move {
-                            while let Some(source) = decode_rx.recv().await {
-                                sink_clone.append(source);
-                                tokio::time::sleep(SLEEP_DURATION).await;
+                        rt_handle.spawn(async move {
+                            match HttpStream::<Client>::create(url.parse().unwrap()).await {
+                                Ok(stream) => {
+                                    match StreamDownload::from_stream(
+                                        stream,
+                                        TempStorageProvider::default(),
+                                        Settings::default(),
+                                    ).await {
+                                        Ok(reader) => {
+                                            if let Ok(source) = Decoder::new(BufReader::new(reader)) {
+                                                sink_clone.append(source);
+                                                sink_clone.play();
+                                            }
+                                        }
+                                        Err(e) => eprintln!("StreamDownload error: {}", e),
+                                    }
+                                }
+                                Err(e) => eprintln!("HttpStream error: {}", e),
                             }
                         });
-                        sink.play();
                     }
                     AudioCommand::Pause => {
                         if sink.is_paused() {
@@ -164,6 +157,10 @@ impl App {
             selected_list: SelectedList::Episodes,
             audio_manager: AudioManager { tx, handle },
             volume: 1.0,
+            search_query: String::new(),
+            input_mode: InputMode::Normal,
+            show_help: false,
+            status_message: String::new(),
         }
     }
     pub fn quit(&mut self) {
@@ -192,35 +189,46 @@ pub enum AudioCommand {
 const MFP_FEED: &str = "https://musicforprogramming.net/rss.xml";
 
 pub async fn music_for_programming() -> Result<Vec<Episode>, Box<dyn Error>> {
-    let response = get(MFP_FEED).await.unwrap();
+    let response = match get(MFP_FEED).await {
+        Ok(res) => res,
+        Err(e) => {
+            return Err(Box::new(e));
+        }
+    };
     let mut episodes = Vec::new();
 
     if response.status().is_success() {
-        let content = response.text().await.unwrap();
+        let content = response.text().await?;
         let channel = Channel::read_from(content.as_bytes())?;
 
         for item in channel.items() {
-            let title = item.title().unwrap().to_owned();
-            let audio_url = item.comments().unwrap().to_owned();
-            let itunes_ext = item.itunes_ext().unwrap().to_owned();
-            let author = &itunes_ext.author.unwrap().clone();
-            let duration = &itunes_ext.duration.unwrap();
-            let keywords = &itunes_ext.keywords.unwrap();
-            let pub_date = item.pub_date().unwrap().to_owned();
-            let link = item.clone().link.unwrap();
+            let title = item.title().unwrap_or("Unknown Title").to_owned();
+            let audio_url = item.comments().unwrap_or("").to_owned();
+            let itunes_ext = item.itunes_ext().cloned();
+            
+            let (author, duration, keywords) = if let Some(ext) = itunes_ext {
+                (
+                    ext.author.unwrap_or_else(|| "Unknown".to_string()),
+                    ext.duration.unwrap_or_else(|| "0:00".to_string()),
+                    ext.keywords.unwrap_or_else(|| "".to_string()),
+                )
+            } else {
+                ("Unknown".to_string(), "0:00".to_string(), "".to_string())
+            };
+
+            let pub_date = item.pub_date().unwrap_or("Unknown Date").to_owned();
+            let link = item.link().unwrap_or("").to_owned();
             let episode = Episode {
                 title,
                 audio_url,
-                author: author.to_owned(),
-                duration: duration.to_owned(),
-                key_words: keywords.to_owned(),
+                author,
+                duration,
+                key_words: keywords,
                 pub_date,
                 link,
             };
             episodes.push(episode);
         }
-    } else {
-        println!("Failed to fetch the RSS feed: HTTP {}", response.status());
     }
 
     Ok(episodes)

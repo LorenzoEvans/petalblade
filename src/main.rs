@@ -13,9 +13,15 @@ use std::sync::{
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut app = App::new();
 
-    let mfp_episodes = music_for_programming().await.unwrap();
-    app.episodes = Arc::new(RwLock::new(mfp_episodes));
-    let backend = CrosstermBackend::new(io::stderr());
+    match music_for_programming().await {
+        Ok(mfp_episodes) => {
+            app.episodes = Arc::new(RwLock::new(mfp_episodes));
+        }
+        Err(e) => {
+            app.status_message = format!("Network Error: Check connection. ({})", e);
+        }
+    }
+    let backend = CrosstermBackend::new(io::stdout());
     let terminal = Terminal::new(backend)?;
     let events = EventHandler::new(250);
     let mut tui = Tui::new(terminal, events);

@@ -2,7 +2,6 @@ use crate::theme::THEME;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color},
     symbols::border::*,
     text::Span,
     text::Text,
@@ -15,7 +14,11 @@ use crate::app::{App, SelectedList};
 pub fn render(app: &mut App, frame: &mut Frame) {
     let outer_layout = Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Percentage(95)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
         .split(frame.size());
 
     let inner_layout = Layout::default()
@@ -99,12 +102,29 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .split(inner_layout[1]);
 
     let episodes_clone = Arc::clone(&app.episodes);
-    let full_episode_title = episodes_clone.read().unwrap()[app.selected_episode]
-        .title
-        .clone();
-    let mut split_title = full_episode_title.splitn(2, ":");
-    let episode_number = split_title.next().unwrap();
-    let episode_title = split_title.next().unwrap();
+    let all_episodes = episodes_clone.read().unwrap();
+    let filtered_episodes: Vec<_> = all_episodes
+        .iter()
+        .filter(|ep| {
+            ep.title
+                .to_lowercase()
+                .contains(&app.search_query.to_lowercase())
+        })
+        .collect();
+
+    let (episode_number, episode_title, episode_duration, episode_pub_date) = if !filtered_episodes.is_empty() {
+        let ep_idx = app.selected_episode % filtered_episodes.len();
+        let ep = filtered_episodes[ep_idx];
+        let mut split_title = ep.title.splitn(2, ":");
+        (
+            split_title.next().unwrap_or("").to_string(),
+            split_title.next().unwrap_or("").to_string(),
+            ep.duration.clone(),
+            ep.pub_date.clone(),
+        )
+    } else {
+        ("N/A".to_string(), "No episodes found".to_string(), "N/A".to_string(), "N/A".to_string())
+    };
 
     let ep_title_block = Block::default()
         .title_top(episode_number)
@@ -129,12 +149,8 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     let episode_information = format!(
         "Duration: {}\nRelease Date: {}",
-        episodes_clone.read().unwrap()[app.selected_episode]
-            .duration
-            .clone(),
-        episodes_clone.read().unwrap()[app.selected_episode]
-            .pub_date
-            .clone(),
+        episode_duration,
+        episode_pub_date,
     );
     let ep_info = Paragraph::new(Text::styled(episode_information, THEME.text))
         .block(ep_info_block);
@@ -159,7 +175,11 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     };
 
     let play_status_bar = Paragraph::new(Text::styled(
-        playback_info,
+        if !app.status_message.is_empty() {
+            app.status_message.clone()
+        } else {
+            playback_info
+        },
         THEME.text,
     ))
     .block(play_status_bar_block);
@@ -175,10 +195,10 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .title_style(THEME.title)
         .border_set(ROUNDED)
         .borders(Borders::ALL)
-        .border_style(THEME.borders);
+        .border_style(if app.selected_list == SelectedList::Search { THEME.active_borders } else { THEME.borders });
 
     let search_bar =
-        Paragraph::new(Text::styled("", THEME.text)).block(search_bar_block);
+        Paragraph::new(Text::styled(app.search_query.clone(), THEME.text)).block(search_bar_block);
 
     let ep_list_block = Block::bordered()
         .title_top("Episode List")
@@ -191,7 +211,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     let mut episode_list_items: Vec<_> = Vec::new();
 
-    for ep in episodes_clone.read().unwrap().iter() {
+    for ep in filtered_episodes.iter() {
         let ep_list_item = ListItem::new(Text::from(ep.title.clone()));
         episode_list_items.push(ep_list_item);
     }
@@ -204,6 +224,12 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     let title = Span::styled("Petalblade", THEME.app_title);
 
+    let bottom_bar = Paragraph::new(Text::styled(
+        "TAB: Cycle | /: Search | ESC: Exit Search | ENTER: Play | SPACE: Pause | s: Stop | +/-: Vol | h: Help | q: Quit",
+        THEME.text,
+    ))
+    .alignment(Alignment::Center);
+
     frame.render_widget(title, outer_layout[0]);
     frame.render_stateful_widget(menu, left_layout[0], &mut app.menu_list_state);
     frame.render_widget(about_mfp, left_layout[1]);
@@ -213,4 +239,58 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     frame.render_widget(play_status_bar, middle_layout[2]);
     frame.render_widget(search_bar, right_layout[0]);
     frame.render_stateful_widget(episode_list, right_layout[1], &mut app.episode_list_state);
+    frame.render_widget(bottom_bar, outer_layout[2]);
+
+    if app.show_help {
+        let help_text = "
+        Petalblade Commands:
+        -------------------
+        TAB       : Cycle through UI elements
+        /         : Enter search mode
+        ESC       : Exit search mode / Close help
+        ENTER     : Play selected episode
+        SPACE     : Pause / Resume playback
+        s         : Stop playback
+        + / =     : Increase volume
+        - / _     : Decrease volume
+        UP / DOWN : Navigate lists / Scroll text
+        h / ?     : Toggle help menu
+        q         : Quit application
+        ";
+        let help_block = Block::default()
+            .title("Help")
+            .borders(Borders::ALL)
+            .border_set(ROUNDED)
+            .border_style(THEME.active_borders)
+            .style(THEME.text);
+        
+        let help_paragraph = Paragraph::new(help_text)
+            .block(help_block)
+            .alignment(Alignment::Left)
+            .wrap(Wrap { trim: true });
+
+        let area = centered_rect(60, 60, frame.size());
+        frame.render_widget(ratatui::widgets::Clear, area); // Clear the background
+        frame.render_widget(help_paragraph, area);
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
