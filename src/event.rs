@@ -2,11 +2,9 @@ use crate::app::AppResult;
 use ratatui::crossterm::event::{
     self, Event as CrosstermEvent, KeyEvent, KeyEventKind, MouseEvent,
 };
-use std::sync::{
-    mpsc,
-};
+use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration};
+use std::time::Duration;
 /// Terminal events.
 #[derive(Clone, Copy, Debug)]
 pub enum Event {
@@ -16,8 +14,9 @@ pub enum Event {
     Mouse(MouseEvent),
     /// Terminal resize.
     Resize(u16, u16),
+    /// Periodic refresh.
+    Tick,
 }
-
 
 /// Terminal event handler.
 #[allow(dead_code)]
@@ -33,27 +32,35 @@ pub struct EventHandler {
 
 impl EventHandler {
     /// Constructs a new instance of [`EventHandler`].
-    pub fn new(_tick_rate: u64) -> Self {
+    pub fn new(tick_rate: u64) -> Self {
         let (sender, receiver) = mpsc::channel();
         let handler = {
             let sender = sender.clone();
-            thread::spawn(move || loop {
-                if event::poll(Duration::from_millis(250)).expect("failed to poll new events") {
-                    match event::read().expect("unable to read event") {
-                        CrosstermEvent::Key(e) => {
-                            if e.kind == KeyEventKind::Press {
-                                sender.send(Event::Key(e))
-                            } else {
-                                Ok(())
+            thread::spawn(move || {
+                let tick_rate = Duration::from_millis(tick_rate);
+                loop {
+                    if event::poll(tick_rate).expect("failed to poll new events") {
+                        let result = match event::read().expect("unable to read event") {
+                            CrosstermEvent::Key(e) => {
+                                if e.kind == KeyEventKind::Press {
+                                    sender.send(Event::Key(e))
+                                } else {
+                                    Ok(())
+                                }
                             }
+                            CrosstermEvent::Mouse(e) => sender.send(Event::Mouse(e)),
+                            CrosstermEvent::Resize(w, h) => sender.send(Event::Resize(w, h)),
+                            CrosstermEvent::FocusGained
+                            | CrosstermEvent::FocusLost
+                            | CrosstermEvent::Paste(_) => Ok(()),
+                        };
+
+                        if result.is_err() {
+                            break;
                         }
-                        CrosstermEvent::Mouse(e) => sender.send(Event::Mouse(e)),
-                        CrosstermEvent::Resize(w, h) => sender.send(Event::Resize(w, h)),
-                        CrosstermEvent::FocusGained => Ok(()),
-                        CrosstermEvent::FocusLost => Ok(()),
-                        CrosstermEvent::Paste(_) => unimplemented!(),
+                    } else if sender.send(Event::Tick).is_err() {
+                        break;
                     }
-                    .expect("failed to send terminal event")
                 }
             })
         };

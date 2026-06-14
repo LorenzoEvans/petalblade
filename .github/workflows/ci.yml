@@ -7,6 +7,8 @@ on:
       - main
       - master
       - develop
+    tags:
+      - "v*"
 
 env:
   CARGO_TERM_COLOR: always
@@ -28,10 +30,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: check formatting
-        run: cargo fmt -- --check
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
   clippy:
     name: clippy
     runs-on: ubuntu-latest
@@ -45,10 +47,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: Run clippy action
-        uses: clechasseur/rs-clippy-check@v3
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
   doc:
     # run docs generation on nightly rather than stable. This enables features like
     # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
@@ -57,34 +59,79 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
       - name: Run cargo doc
-        run: cargo doc --no-deps --all-features
-        env:
-          RUSTDOCFLAGS: --cfg docsrs
+        run: cargo doc --workspace --all-features --no-deps
   test:
     runs-on: ${{ matrix.os }}
     name: test ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      # if your project needs OpenSSL, uncomment this to fix Windows builds.
-      # it's commented out by default as the install command takes 5-10m.
-      # - run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
-      #   if: runner.os == 'Windows'
-      # - run: vcpkg install openssl:x64-windows-static-md
-      #   if: runner.os == 'Windows'
       - uses: actions/checkout@v4
+      - name: Install Linux audio dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-      # enable this ci template to run regardless of whether the lockfile is checked in or not
-      - name: cargo generate-lockfile
-        if: hashFiles('Cargo.lock') == ''
-        run: cargo generate-lockfile
-      - name: cargo test --locked
-        run: cargo test --locked --all-features --all-targets
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+      - name: cargo test --locked
+        run: cargo test --workspace --locked --all-features
+
+  release:
+    name: release ${{ matrix.os }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [fmt, clippy, doc, test]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux audio dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Package Unix artifact
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/petalblade
+          cp target/release/petalblade dist/petalblade/
+          cp README.md LICENSE dist/petalblade/
+          tar -C dist -czf "petalblade-${{ runner.os }}-${{ runner.arch }}.tar.gz" petalblade
+          shasum -a 256 "petalblade-${{ runner.os }}-${{ runner.arch }}.tar.gz" > "petalblade-${{ runner.os }}-${{ runner.arch }}.tar.gz.sha256"
+      - name: Package Windows artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/petalblade
+          Copy-Item target/release/petalblade.exe dist/petalblade/
+          Copy-Item README.md, LICENSE dist/petalblade/
+          Compress-Archive -Path dist/petalblade -DestinationPath "petalblade-${{ runner.os }}-${{ runner.arch }}.zip"
+          Get-FileHash "petalblade-${{ runner.os }}-${{ runner.arch }}.zip" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  petalblade-${{ runner.os }}-${{ runner.arch }}.zip" } |
+            Set-Content "petalblade-${{ runner.os }}-${{ runner.arch }}.zip.sha256"
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            petalblade-*.tar.gz
+            petalblade-*.tar.gz.sha256
+            petalblade-*.zip
+            petalblade-*.zip.sha256

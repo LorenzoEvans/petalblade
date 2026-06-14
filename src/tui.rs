@@ -1,10 +1,10 @@
 use crate::app::{App, AppResult};
 use crate::event::EventHandler;
 use crate::ui;
+use ratatui::Terminal;
 use ratatui::backend::Backend;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-use ratatui::Terminal;
 use std::io;
 use std::panic;
 /// Representation of a terminal user interface.

@@ -7,7 +7,6 @@ use ratatui::{
     text::Text,
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
-use std::sync::Arc;
 
 use crate::app::{App, SelectedList};
 
@@ -38,18 +37,22 @@ pub fn render(app: &mut App, frame: &mut Frame) {
             Constraint::Percentage(33),
         ])
         .split(inner_layout[0]);
-    
+
     let menu_block = Block::default()
         .title_top("MENU")
         .title_alignment(Alignment::Center)
         .title_style(THEME.title)
         .border_set(ROUNDED)
         .borders(Borders::ALL)
-        .border_style(if app.selected_list == SelectedList::Menu { THEME.active_borders } else { THEME.borders });
+        .border_style(if app.selected_list == SelectedList::Menu {
+            THEME.active_borders
+        } else {
+            THEME.borders
+        });
 
     let menu_list_items = vec![
-        ListItem::new(Text::styled("Open Playlist", THEME.text)),
-        ListItem::new(Text::styled("Change Theme", THEME.text)),
+        ListItem::new(Text::styled("All Episodes", THEME.text)),
+        ListItem::new(Text::styled("Favorites", THEME.text)),
     ];
 
     let menu = List::new(menu_list_items)
@@ -64,7 +67,11 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .title_alignment(Alignment::Center)
         .title_style(THEME.title)
         .border_set(ROUNDED)
-        .border_style(if app.selected_list == SelectedList::About { THEME.active_borders } else { THEME.borders })
+        .border_style(if app.selected_list == SelectedList::About {
+            THEME.active_borders
+        } else {
+            THEME.borders
+        })
         .style(THEME.text);
 
     let about_mfp = Paragraph::new(Text::raw(
@@ -81,7 +88,11 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .title_alignment(Alignment::Center)
         .title_style(THEME.title)
         .border_set(ROUNDED)
-        .border_style(if app.selected_list == SelectedList::Credits { THEME.active_borders } else { THEME.borders })
+        .border_style(if app.selected_list == SelectedList::Credits {
+            THEME.active_borders
+        } else {
+            THEME.borders
+        })
         .style(THEME.text);
 
     let mfp_credits = Paragraph::new(Text::raw(
@@ -101,30 +112,27 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         ])
         .split(inner_layout[1]);
 
-    let episodes_clone = Arc::clone(&app.episodes);
-    let all_episodes = episodes_clone.read().unwrap();
-    let filtered_episodes: Vec<_> = all_episodes
-        .iter()
-        .filter(|ep| {
-            ep.title
-                .to_lowercase()
-                .contains(&app.search_query.to_lowercase())
-        })
-        .collect();
+    let visible_episodes = app.visible_episodes();
 
-    let (episode_number, episode_title, episode_duration, episode_pub_date) = if !filtered_episodes.is_empty() {
-        let ep_idx = app.selected_episode % filtered_episodes.len();
-        let ep = filtered_episodes[ep_idx];
-        let mut split_title = ep.title.splitn(2, ":");
-        (
-            split_title.next().unwrap_or("").to_string(),
-            split_title.next().unwrap_or("").to_string(),
-            ep.duration.clone(),
-            ep.pub_date.clone(),
-        )
-    } else {
-        ("N/A".to_string(), "No episodes found".to_string(), "N/A".to_string(), "N/A".to_string())
-    };
+    let (episode_number, episode_title, episode_duration, episode_pub_date) =
+        if !visible_episodes.is_empty() {
+            let ep_idx = app.selected_episode % visible_episodes.len();
+            let ep = &visible_episodes[ep_idx];
+            let mut split_title = ep.title.splitn(2, ":");
+            (
+                split_title.next().unwrap_or("").to_string(),
+                split_title.next().unwrap_or("").to_string(),
+                ep.duration.clone(),
+                ep.pub_date.clone(),
+            )
+        } else {
+            (
+                "N/A".to_string(),
+                "No episodes found".to_string(),
+                "N/A".to_string(),
+                "N/A".to_string(),
+            )
+        };
 
     let ep_title_block = Block::default()
         .title_top(episode_number)
@@ -135,11 +143,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .border_style(THEME.borders)
         .style(THEME.text);
 
-    let ep_title = Paragraph::new(Text::styled(
-        episode_title,
-        THEME.text,
-    ))
-    .block(ep_title_block);
+    let ep_title = Paragraph::new(Text::styled(episode_title, THEME.text)).block(ep_title_block);
 
     let ep_info_block = Block::default()
         .borders(Borders::ALL)
@@ -149,11 +153,10 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     let episode_information = format!(
         "Duration: {}\nRelease Date: {}",
-        episode_duration,
-        episode_pub_date,
+        episode_duration, episode_pub_date,
     );
-    let ep_info = Paragraph::new(Text::styled(episode_information, THEME.text))
-        .block(ep_info_block);
+    let ep_info =
+        Paragraph::new(Text::styled(episode_information, THEME.text)).block(ep_info_block);
 
     let play_status_bar_block = Block::default()
         .title_top("Status Bar")
@@ -189,13 +192,22 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .constraints([Constraint::Percentage(10), Constraint::Percentage(90)])
         .split(inner_layout[2]);
 
+    let search_title = if app.show_favorites_only {
+        "Search Favorites"
+    } else {
+        "Search"
+    };
     let search_bar_block = Block::default()
-        .title_top("Search Bar")
+        .title_top(search_title)
         .title_alignment(Alignment::Center)
         .title_style(THEME.title)
         .border_set(ROUNDED)
         .borders(Borders::ALL)
-        .border_style(if app.selected_list == SelectedList::Search { THEME.active_borders } else { THEME.borders });
+        .border_style(if app.selected_list == SelectedList::Search {
+            THEME.active_borders
+        } else {
+            THEME.borders
+        });
 
     let search_bar =
         Paragraph::new(Text::styled(app.search_query.clone(), THEME.text)).block(search_bar_block);
@@ -206,13 +218,18 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         .title_style(THEME.title)
         .border_set(ROUNDED)
         .borders(Borders::ALL)
-        .border_style(if app.selected_list == SelectedList::Episodes { THEME.active_borders } else { THEME.borders })
+        .border_style(if app.selected_list == SelectedList::Episodes {
+            THEME.active_borders
+        } else {
+            THEME.borders
+        })
         .style(THEME.text);
 
     let mut episode_list_items: Vec<_> = Vec::new();
 
-    for ep in filtered_episodes.iter() {
-        let ep_list_item = ListItem::new(Text::from(ep.title.clone()));
+    for ep in visible_episodes.iter() {
+        let marker = if app.is_favorite(ep) { "* " } else { "  " };
+        let ep_list_item = ListItem::new(Text::from(format!("{marker}{}", ep.title)));
         episode_list_items.push(ep_list_item);
     }
 
@@ -225,7 +242,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     let title = Span::styled("Petalblade", THEME.app_title);
 
     let bottom_bar = Paragraph::new(Text::styled(
-        "TAB: Cycle | /: Search | ESC: Exit Search | ENTER: Play | SPACE: Pause | s: Stop | +/-: Vol | h: Help | q: Quit",
+        "TAB: Cycle | /: Search | ENTER: Play/Select | SPACE: Pause | s: Stop | f: Favorite | F: Favorites | +/-: Vol | h: Help | q: Quit",
         THEME.text,
     ))
     .alignment(Alignment::Center);
@@ -253,6 +270,8 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         s         : Stop playback
         + / =     : Increase volume
         - / _     : Decrease volume
+        f         : Toggle favorite
+        F         : Toggle favorites filter
         UP / DOWN : Navigate lists / Scroll text
         h / ?     : Toggle help menu
         q         : Quit application
@@ -263,7 +282,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
             .border_set(ROUNDED)
             .border_style(THEME.active_borders)
             .style(THEME.text);
-        
+
         let help_paragraph = Paragraph::new(help_text)
             .block(help_block)
             .alignment(Alignment::Left)
@@ -275,7 +294,11 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     }
 }
 
-fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
+fn centered_rect(
+    percent_x: u16,
+    percent_y: u16,
+    r: ratatui::layout::Rect,
+) -> ratatui::layout::Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([

@@ -1,6 +1,4 @@
-use ratatui::style::{
-    Color, Modifier, Style,
-};
+use ratatui::style::{Color, Modifier, Style};
 
 pub struct Theme {
     pub foreground: Style,
@@ -16,12 +14,17 @@ pub struct Theme {
 pub const THEME: Theme = Theme {
     background: Style::new().bg(BACKGROUND),
     foreground: Style::new().fg(FOREGROUND),
-    app_title: Style::new().fg(APP_TITLE).bg(BACKGROUND).add_modifier(Modifier::BOLD),
+    app_title: Style::new()
+        .fg(APP_TITLE)
+        .bg(BACKGROUND)
+        .add_modifier(Modifier::BOLD),
     borders: Style::new().fg(BORDERS),
     active_borders: Style::new().fg(HIGHLIGHT_FG),
     text: Style::new().fg(TEXT_FG),
     title: Style::new().fg(TITLE).add_modifier(Modifier::BOLD),
-    highlight: Style::new().fg(HIGHLIGHT_FG).add_modifier(Modifier::REVERSED),
+    highlight: Style::new()
+        .fg(HIGHLIGHT_FG)
+        .add_modifier(Modifier::REVERSED),
 };
 
 const BACKGROUND: Color = Color::Rgb(20, 20, 20);

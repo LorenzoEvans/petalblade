@@ -5,7 +5,11 @@ description = "A TUI for streaming musicForProgramming Mixes"
 authors = ["liminallogs@proton.me <liminallogs@proton.me>"]
 license = "MIT"
 edition = "2024"
-
+repository = "https://github.com/LorenzoEvans/petalblade"
+homepage = "https://github.com/LorenzoEvans/petalblade"
+readme = "README.md"
+keywords = ["tui", "music", "streaming", "terminal"]
+categories = ["command-line-utilities", "multimedia::audio"]
 
 [dependencies]
 ratatui = "0.27.0"
@@ -13,6 +17,7 @@ rodio = { version = "0.19.0", default-features = false, features = ["symphonia-a
 reqwest = { version = "0.12.5", features = ["blocking", "stream"] }
 crossterm = { version = "0.27.0", features = ["event-stream"] }
 serde = { version = "1.0.204", features = ["derive"] }
+toml = "0.8.23"
 tokio = { version = "1.38.0", features = ["full"] }
 rss = "2.0.8"
 stream-download = "0.7.1"
