@@ -128,7 +128,7 @@ jobs:
             ForEach-Object { "$($_.Hash.ToLower())  petalblade-${{ runner.os }}-${{ runner.arch }}.zip" } |
             Set-Content "petalblade-${{ runner.os }}-${{ runner.arch }}.zip.sha256"
       - name: Publish GitHub release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             petalblade-*.tar.gz
